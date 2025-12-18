@@ -13,14 +13,21 @@ from ml.model import (
     train_model,
 )
 # TODO: load the cencus.csv data
-project_path = "Your path here"
+project_path = os.path.dirname(os.path.abspath(__file__))
 data_path = os.path.join(project_path, "data", "census.csv")
-print(data_path)
-data = None # your code here
+
+data = pd.read_csv(data_path)
 
 # TODO: split the provided data to have a train dataset and a test dataset
 # Optional enhancement, use K-fold cross validation instead of a train-test split.
-train, test = None, None# Your code here
+LABEL = "salary"  # put this near the top (once), or reuse if you already have it
+
+train, test = train_test_split(
+    data,
+    test_size=0.20,
+    random_state=42,
+    stratify=data[LABEL],  # keeps salary class balance
+)
 
 # DO NOT MODIFY
 cat_features = [
@@ -36,52 +43,66 @@ cat_features = [
 
 # TODO: use the process_data function provided to process the data.
 X_train, y_train, encoder, lb = process_data(
-    # your code here
-    # use the train dataset 
-    # use training=True
-    # do not need to pass encoder and lb as input
-    )
+    train,
+    categorical_features=cat_features,
+    label="salary",       
+    training=True,
+)
 
 X_test, y_test, _, _ = process_data(
     test,
     categorical_features=cat_features,
-    label="salary",
+    label="salary",       
     training=False,
     encoder=encoder,
     lb=lb,
 )
 
 # TODO: use the train_model function to train the model on the training dataset
-model = None # your code here
+model = train_model(X_train, y_train)
 
 # save the model and the encoder
-model_path = os.path.join(project_path, "model", "model.pkl")
+model_dir = os.path.join(project_path, "model")
+os.makedirs(model_dir, exist_ok=True)
+model_path = os.path.join(model_dir, "model.pkl")
+encoder_path = os.path.join(model_dir, "encoder.pkl")
+lb_path = os.path.join(model_dir, "lb.pkl")
+
 save_model(model, model_path)
-encoder_path = os.path.join(project_path, "model", "encoder.pkl")
 save_model(encoder, encoder_path)
+save_model(lb, lb_path)
 
 # load the model
-model = load_model(
-    model_path
-) 
+model = load_model(model_path)
+encoder = load_model(encoder_path)
+lb = load_model(lb_path)
 
 # TODO: use the inference function to run the model inferences on the test dataset.
-preds = None # your code here
+preds = inference(model, X_test)
 
 # Calculate and print the metrics
 p, r, fb = compute_model_metrics(y_test, preds)
 print(f"Precision: {p:.4f} | Recall: {r:.4f} | F1: {fb:.4f}")
 
-# TODO: compute the performance on model slices using the performance_on_categorical_slice function
-# iterate through the categorical features
-for col in cat_features:
-    # iterate through the unique values in one categorical feature
-    for slicevalue in sorted(test[col].unique()):
-        count = test[test[col] == slicevalue].shape[0]
-        p, r, fb = performance_on_categorical_slice(
-            # your code here
-            # use test, col and slicevalue as part of the input
-        )
-        with open("slice_output.txt", "a") as f:
-            print(f"{col}: {slicevalue}, Count: {count:,}", file=f)
-            print(f"Precision: {p:.4f} | Recall: {r:.4f} | F1: {fb:.4f}", file=f)
+# Write slice metrics to slice_output.txt (overwrite each run)
+
+slice_out_path = os.path.join(project_path, "slice_output.txt")
+
+with open(slice_out_path, "w") as f:
+    for col in cat_features:
+        for slicevalue in sorted(test[col].unique()):
+            count = (test[col] == slicevalue).sum()
+
+            p_s, r_s, fb_s = performance_on_categorical_slice(
+                test,
+                col,
+                slicevalue,
+                cat_features,
+                LABEL,
+                encoder,
+                lb,
+                model,
+            )
+
+            f.write(f"{col}: {slicevalue}, Count: {count}\n")
+            f.write(f"Precision: {p_s:.4f} | Recall: {r_s:.4f} | F1: {fb_s:.4f}\n\n")
